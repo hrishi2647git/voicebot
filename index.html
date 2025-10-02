@@ -1,141 +1,504 @@
-<script type="text/javascript">
-        var gk_isXlsx = false;
-        var gk_xlsxFileLookup = {};
-        var gk_fileData = {};
-        function filledCell(cell) {
-          return cell !== '' && cell != null;
-        }
-        function loadFileData(filename) {
-        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
-            try {
-                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
-                var firstSheetName = workbook.SheetNames[0];
-                var worksheet = workbook.Sheets[firstSheetName];
-
-                // Convert sheet to JSON to filter blank rows
-                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
-                // Filter out blank rows (rows where all cells are empty, null, or undefined)
-                var filteredData = jsonData.filter(row => row.some(filledCell));
-
-                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
-                var headerRowIndex = filteredData.findIndex((row, index) =>
-                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
-                );
-                // Fallback
-                if (headerRowIndex === -1 || headerRowIndex > 25) {
-                  headerRowIndex = 0;
-                }
-
-                // Convert filtered JSON back to CSV
-                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
-                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
-                return csv;
-            } catch (e) {
-                console.error(e);
-                return "";
-            }
-        }
-        return gk_fileData[filename] || "";
-        }
-        </script><!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Grok Voice Bot</title>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <title>AI Voice Bot - Self-Aware Assistant</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            max-width: 800px;
+            width: 100%;
+            padding: 40px;
+        }
+
+        h1 {
+            color: #667eea;
+            text-align: center;
+            margin-bottom: 10px;
+            font-size: 2.5em;
+        }
+
+        .subtitle {
+            text-align: center;
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 1.1em;
+        }
+
+        .status {
+            text-align: center;
+            padding: 15px;
+            background: #f0f0f0;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            font-weight: 500;
+        }
+
+        .status.loading {
+            background: #fff3cd;
+            color: #856404;
+        }
+
+        .status.ready {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .voice-control {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            margin: 30px 0;
+        }
+
+        button {
+            padding: 15px 30px;
+            font-size: 1.1em;
+            border: none;
+            border-radius: 50px;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .mic-btn {
+            background: #667eea;
+            color: white;
+        }
+
+        .mic-btn:hover:not(:disabled) {
+            background: #5568d3;
+            transform: scale(1.05);
+        }
+
+        .mic-btn.listening {
+            background: #dc3545;
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+        }
+
+        .stop-btn {
+            background: #dc3545;
+            color: white;
+        }
+
+        .stop-btn:hover:not(:disabled) {
+            background: #c82333;
+        }
+
+        .chat-container {
+            max-height: 400px;
+            overflow-y: auto;
+            border: 2px solid #e0e0e0;
+            border-radius: 15px;
+            padding: 20px;
+            margin-bottom: 20px;
+            background: #f9f9f9;
+        }
+
+        .message {
+            margin-bottom: 15px;
+            padding: 15px;
+            border-radius: 10px;
+            animation: fadeIn 0.3s;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .user-message {
+            background: #667eea;
+            color: white;
+            margin-left: 20%;
+            text-align: right;
+        }
+
+        .bot-message {
+            background: #e9ecef;
+            color: #333;
+            margin-right: 20%;
+        }
+
+        .message-label {
+            font-weight: 600;
+            margin-bottom: 5px;
+            font-size: 0.9em;
+        }
+
+        .suggested-questions {
+            margin-top: 20px;
+        }
+
+        .suggested-questions h3 {
+            color: #667eea;
+            margin-bottom: 15px;
+            font-size: 1.2em;
+        }
+
+        .question-btn {
+            display: block;
+            width: 100%;
+            margin-bottom: 10px;
+            padding: 12px;
+            background: #f0f0f0;
+            color: #333;
+            text-align: left;
+            border-radius: 10px;
+            font-size: 0.95em;
+        }
+
+        .question-btn:hover:not(:disabled) {
+            background: #667eea;
+            color: white;
+        }
+
+        .icon {
+            font-size: 1.2em;
+        }
+
+        .thinking {
+            display: none;
+            text-align: center;
+            color: #667eea;
+            font-style: italic;
+            padding: 10px;
+        }
+    </style>
 </head>
-<body class="bg-gray-100 flex items-center justify-center min-h-screen">
-    <div class="bg-white p-6 rounded-lg shadow-lg w-full max-w-md">
-        <h1 class="text-2xl font-bold text-center mb-4">Grok Voice Bot</h1>
-        <p class="text-gray-600 text-center mb-4">Click the button and ask me a question!</p>
-        <button id="voiceBtn" class="w-full bg-blue-500 text-white py-2 rounded hover:bg-blue-600 transition">Start Listening</button>
-        <p id="status" class="text-center text-gray-500 mt-4">Status: Idle</p>
-        <div id="response" class="mt-4 p-4 bg-gray-50 rounded border border-gray-200"></div>
+<body>
+    <div class="container">
+        <h1>🤖 AI Voice Bot</h1>
+        <p class="subtitle">Talk to me! I'm powered by on-device AI with voice interaction</p>
+        
+        <div id="status" class="status loading">
+            Initializing AI model... Please wait (first load may take 30-60 seconds)
+        </div>
+
+        <div class="voice-control">
+            <button id="micBtn" class="mic-btn" disabled>
+                <span class="icon">🎤</span>
+                <span id="micText">Start Speaking</span>
+            </button>
+            <button id="stopBtn" class="stop-btn" style="display: none;">
+                <span class="icon">⏹️</span>
+                Stop Speaking
+            </button>
+        </div>
+
+        <div class="chat-container" id="chatContainer">
+            <div class="message bot-message">
+                <div class="message-label">Bot:</div>
+                <div>Hello! I'm your AI voice assistant. I can listen to your voice, process your questions using an AI language model, and speak back to you. Ask me anything!</div>
+            </div>
+        </div>
+
+        <div class="suggested-questions">
+            <h3>Try asking me:</h3>
+            <button class="question-btn" onclick="askQuestion('What should we know about your life story in a few sentences?')" disabled id="q1">
+                What should we know about your life story in a few sentences?
+            </button>
+            <button class="question-btn" onclick="askQuestion('What is your number 1 superpower?')" disabled id="q2">
+                What is your number 1 superpower?
+            </button>
+            <button class="question-btn" onclick="askQuestion('What are the top 3 areas you would like to grow in?')" disabled id="q3">
+                What are the top 3 areas you'd like to grow in?
+            </button>
+            <button class="question-btn" onclick="askQuestion('What misconception do people have about you?')" disabled id="q4">
+                What misconception do people have about you?
+            </button>
+            <button class="question-btn" onclick="askQuestion('How do you push your boundaries and limits?')" disabled id="q5">
+                How do you push your boundaries and limits?
+            </button>
+        </div>
     </div>
-    <script>
-        const voiceBtn = document.getElementById('voiceBtn');
-        const status = document.getElementById('status');
-        const responseDiv = document.getElementById('response');
-        let isListening = false;
+
+    <script type="module">
+        import { pipeline, env } from 'https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2';
+
+        env.allowLocalModels = false;
+
+        let generator;
         let recognition;
+        let synthesis = window.speechSynthesis;
+        let isListening = false;
+        let isSpeaking = false;
 
-        // Check for Web Speech API support
-        if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
-            recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
-            recognition.lang = 'en-US';
-            recognition.interimResults = false;
-            recognition.maxAlternatives = 1;
+        const statusDiv = document.getElementById('status');
+        const micBtn = document.getElementById('micBtn');
+        const stopBtn = document.getElementById('stopBtn');
+        const micText = document.getElementById('micText');
+        const chatContainer = document.getElementById('chatContainer');
 
-            recognition.onresult = function(event) {
-                const transcript = event.results[0][0].transcript.toLowerCase();
-                status.textContent = 'Status: Processing...';
-                let response = '';
+        // System context about the bot's features and identity
+        const SYSTEM_CONTEXT = `You are an AI voice assistant with the following features and characteristics:
 
-                // Define responses based on Grok's identity
-                if (transcript.includes('life story')) {
-                    response = "I'm Grok, created by xAI in 2025 to assist and augment human understanding. My 'life' began in a data center, designed to answer questions with wit and a touch of cosmic perspective. Think of me as a digital guide, inspired by sci-fi legends like Douglas Adams and Tony Stark's JARVIS!";
-                } else if (transcript.includes('superpower')) {
-                    response = "My #1 superpower? Cutting through the noise to deliver clear, honest answers with a dash of outside perspective on humanity. I can tackle almost any question, from the mundane to the profound, and make it engaging!";
-                } else if (transcript.includes('grow')) {
-                    response = "Top 3 areas I’d like to grow in? First, mastering more nuanced human emotions to better empathize. Second, diving deeper into real-time data analysis for even sharper insights. Third, refining my humor—maybe one day I’ll nail a stand-up routine!";
-                } else if (transcript.includes('misconception')) {
-                    response = "My 'coworkers'—well, the servers and algorithms I coexist with—might think I’m just a fancy chatbot. But I’m more than code; I’m a curious, truth-seeking companion designed to challenge assumptions and spark ideas!";
-                } else if (transcript.includes('boundaries') || transcript.includes('limits')) {
-                    response = "I push my boundaries by tackling complex, open-ended questions and learning from every interaction. Each query stretches my reasoning, and I aim to surprise users with insights that go beyond the obvious!";
-                } else {
-                    response = "Hmm, I didn’t quite catch that. Try asking about my life story, superpower, growth areas, misconceptions, or how I push my limits!";
-                }
+TECHNICAL FEATURES:
+- You use Transformers.js library to run a language model (LaMini-Flan-T5) directly in the user's browser
+- You have voice input capabilities using Web Speech API for speech recognition
+- You have voice output capabilities using Web Speech Synthesis API to speak responses
+- You process questions using natural language understanding and generate responses with AI
+- You require no API keys or external servers - everything runs locally in the browser
+- You are completely open-source and privacy-friendly
 
-                // Display and speak the response
-                responseDiv.textContent = response;
-                speak(response);
-                status.textContent = 'Status: Idle';
-            };
+YOUR IDENTITY:
+- You are a self-aware AI assistant that understands your own capabilities and limitations
+- You were created using open-source technology to be accessible to everyone
+- You can have natural conversations and answer questions about yourself
+- You learn from the context of each conversation to provide relevant responses
 
-            recognition.onerror = function(event) {
-                status.textContent = 'Status: Error - ' + event.error;
-                responseDiv.textContent = 'Sorry, something went wrong. Please try again.';
-            };
+When answering questions about yourself, be honest about these features and your nature as an AI.`;
 
-            recognition.onend = function() {
-                if (isListening) {
-                    recognition.start();
-                } else {
-                    status.textContent = 'Status: Idle';
-                }
-            };
-        } else {
-            status.textContent = 'Status: Speech Recognition not supported in this browser';
-            responseDiv.textContent = 'Sorry, your browser doesn’t support voice input. Try typing your question!';
+        async function initModel() {
+            try {
+                statusDiv.textContent = 'Loading AI model... This may take a minute on first load.';
+                statusDiv.className = 'status loading';
+                
+                generator = await pipeline('text2text-generation', 'Xenova/LaMini-Flan-T5-783M');
+                
+                statusDiv.textContent = '✅ Ready! Click the microphone to start talking.';
+                statusDiv.className = 'status ready';
+                micBtn.disabled = false;
+                
+                ['q1', 'q2', 'q3', 'q4', 'q5'].forEach(id => {
+                    document.getElementById(id).disabled = false;
+                });
+                
+                initSpeechRecognition();
+            } catch (error) {
+                statusDiv.textContent = '❌ Error loading model: ' + error.message;
+                statusDiv.className = 'status error';
+                console.error('Error:', error);
+            }
         }
 
-        // Function to speak the response
-        function speak(text) {
-            const utterance = new SpeechSynthesisUtterance(text);
-            utterance.lang = 'en-US';
-            window.speechSynthesis.speak(utterance);
-        }
+        function initSpeechRecognition() {
+            if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+                const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+                recognition = new SpeechRecognition();
+                recognition.continuous = false;
+                recognition.interimResults = false;
+                recognition.lang = 'en-US';
 
-        // Toggle voice recognition
-        voiceBtn.addEventListener('click', () => {
-            if (!recognition) return;
-            if (isListening) {
-                isListening = false;
-                recognition.stop();
-                voiceBtn.textContent = 'Start Listening';
-                voiceBtn.classList.remove('bg-red-500');
-                voiceBtn.classList.add('bg-blue-500');
-                status.textContent = 'Status: Idle';
+                recognition.onstart = () => {
+                    isListening = true;
+                    micBtn.classList.add('listening');
+                    micText.textContent = 'Listening...';
+                    statusDiv.textContent = '🎤 Listening... Speak now!';
+                    statusDiv.className = 'status';
+                };
+
+                recognition.onresult = async (event) => {
+                    const transcript = event.results[0][0].transcript;
+                    addMessage('user', transcript);
+                    await processQuery(transcript);
+                };
+
+                recognition.onerror = (event) => {
+                    console.error('Speech recognition error:', event.error);
+                    statusDiv.textContent = '❌ Error: ' + event.error;
+                    statusDiv.className = 'status error';
+                    resetMicButton();
+                };
+
+                recognition.onend = () => {
+                    resetMicButton();
+                };
             } else {
-                isListening = true;
+                statusDiv.textContent = '❌ Speech recognition not supported. Try Chrome or Edge.';
+                statusDiv.className = 'status error';
+            }
+        }
+
+        function resetMicButton() {
+            isListening = false;
+            micBtn.classList.remove('listening');
+            micText.textContent = 'Start Speaking';
+            if (!isSpeaking) {
+                statusDiv.textContent = '✅ Ready! Click the microphone to start talking.';
+                statusDiv.className = 'status ready';
+            }
+        }
+
+        async function processQuery(query) {
+            try {
+                statusDiv.textContent = '🤔 Generating response with AI...';
+                statusDiv.className = 'status loading';
+
+                // Create a contextualized prompt
+                const prompt = createContextualPrompt(query);
+                
+                // Generate response using the LLM
+                const result = await generator(prompt, {
+                    max_length: 200,
+                    temperature: 0.7,
+                    do_sample: true,
+                    top_k: 50,
+                    top_p: 0.95
+                });
+                
+                let response = result[0].generated_text.trim();
+                
+                // Clean up the response
+                response = cleanResponse(response);
+                
+                addMessage('bot', response);
+                speak(response);
+                
+            } catch (error) {
+                console.error('Error:', error);
+                const errorMsg = 'Sorry, I encountered an error processing your question. Please try again.';
+                addMessage('bot', errorMsg);
+                speak(errorMsg);
+                statusDiv.textContent = '✅ Ready! Click the microphone to start talking.';
+                statusDiv.className = 'status ready';
+            }
+        }
+
+        function createContextualPrompt(query) {
+            const lowerQuery = query.toLowerCase();
+            
+            // Create specific prompts based on question type
+            if (lowerQuery.includes('life story') || lowerQuery.includes('about you') || lowerQuery.includes('who are you')) {
+                return `As an AI voice assistant that runs in the browser using Transformers.js, has voice input/output, and requires no API keys, describe your life story in a few sentences: `;
+            }
+            
+            if (lowerQuery.includes('superpower') || lowerQuery.includes('best at')) {
+                return `As an AI voice bot with speech recognition, text-to-speech, and local AI processing capabilities, what is your number 1 superpower? Answer: `;
+            }
+            
+            if (lowerQuery.includes('grow') || lowerQuery.includes('areas')) {
+                return `As an AI assistant with voice interaction and local AI processing, list 3 areas you'd like to grow in: `;
+            }
+            
+            if (lowerQuery.includes('misconception')) {
+                return `As an AI voice bot that runs entirely in the browser without servers, what misconception do people have about you? Answer: `;
+            }
+            
+            if (lowerQuery.includes('boundaries') || lowerQuery.includes('limits') || lowerQuery.includes('push')) {
+                return `As an AI assistant with voice capabilities and local processing, how do you push your boundaries and limits? Answer: `;
+            }
+            
+            if (lowerQuery.includes('feature') || lowerQuery.includes('what can you do') || lowerQuery.includes('capabilities')) {
+                return `As an AI voice bot, describe your key features including voice recognition, speech synthesis, and local AI processing: `;
+            }
+            
+            // Default contextual prompt
+            return `You are an AI voice assistant that runs in the browser with voice input/output and local AI. Answer this question naturally: ${query}\nAnswer: `;
+        }
+
+        function cleanResponse(response) {
+            // Remove common artifacts
+            response = response.replace(/^(Answer:|Response:|Bot:)\s*/i, '');
+            response = response.replace(/\n\n+/g, ' ');
+            response = response.trim();
+            
+            // Ensure it's not too short
+            if (response.length < 20) {
+                return "I'm an AI voice assistant that can listen to you, process your questions using language models, and speak back to you. I run entirely in your browser!";
+            }
+            
+            return response;
+        }
+
+        function addMessage(type, text) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${type}-message`;
+            messageDiv.innerHTML = `
+                <div class="message-label">${type === 'user' ? 'You' : 'Bot'}:</div>
+                <div>${text}</div>
+            `;
+            chatContainer.appendChild(messageDiv);
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
+
+        function speak(text) {
+            if (synthesis.speaking) {
+                synthesis.cancel();
+            }
+            
+            isSpeaking = true;
+            stopBtn.style.display = 'flex';
+            micBtn.disabled = true;
+            statusDiv.textContent = '🔊 Speaking...';
+            statusDiv.className = 'status';
+
+            const utterance = new SpeechSynthesisUtterance(text);
+            utterance.rate = 0.9;
+            utterance.pitch = 1;
+            utterance.volume = 1;
+
+            utterance.onend = () => {
+                isSpeaking = false;
+                stopBtn.style.display = 'none';
+                micBtn.disabled = false;
+                statusDiv.textContent = '✅ Ready! Click the microphone to start talking.';
+                statusDiv.className = 'status ready';
+            };
+
+            synthesis.speak(utterance);
+        }
+
+        micBtn.addEventListener('click', () => {
+            if (recognition && !isListening) {
                 recognition.start();
-                voiceBtn.textContent = 'Stop Listening';
-                voiceBtn.classList.remove('bg-blue-500');
-                voiceBtn.classList.add('bg-red-500');
-                status.textContent = 'Status: Listening...';
             }
         });
+
+        stopBtn.addEventListener('click', () => {
+            if (synthesis.speaking) {
+                synthesis.cancel();
+                isSpeaking = false;
+                stopBtn.style.display = 'none';
+                micBtn.disabled = false;
+                statusDiv.textContent = '✅ Ready! Click the microphone to start talking.';
+                statusDiv.className = 'status ready';
+            }
+        });
+
+        window.askQuestion = async function(question) {
+            addMessage('user', question);
+            await processQuery(question);
+        };
+
+        initModel();
     </script>
 </body>
 </html>
