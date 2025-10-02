@@ -1,0 +1,141 @@
+<script type="text/javascript">
+        var gk_isXlsx = false;
+        var gk_xlsxFileLookup = {};
+        var gk_fileData = {};
+        function filledCell(cell) {
+          return cell !== '' && cell != null;
+        }
+        function loadFileData(filename) {
+        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
+            try {
+                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
+                var firstSheetName = workbook.SheetNames[0];
+                var worksheet = workbook.Sheets[firstSheetName];
+
+                // Convert sheet to JSON to filter blank rows
+                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
+                // Filter out blank rows (rows where all cells are empty, null, or undefined)
+                var filteredData = jsonData.filter(row => row.some(filledCell));
+
+                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
+                var headerRowIndex = filteredData.findIndex((row, index) =>
+                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
+                );
+                // Fallback
+                if (headerRowIndex === -1 || headerRowIndex > 25) {
+                  headerRowIndex = 0;
+                }
+
+                // Convert filtered JSON back to CSV
+                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
+                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
+                return csv;
+            } catch (e) {
+                console.error(e);
+                return "";
+            }
+        }
+        return gk_fileData[filename] || "";
+        }
+        </script><!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Grok Voice Bot</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 flex items-center justify-center min-h-screen">
+    <div class="bg-white p-6 rounded-lg shadow-lg w-full max-w-md">
+        <h1 class="text-2xl font-bold text-center mb-4">Grok Voice Bot</h1>
+        <p class="text-gray-600 text-center mb-4">Click the button and ask me a question!</p>
+        <button id="voiceBtn" class="w-full bg-blue-500 text-white py-2 rounded hover:bg-blue-600 transition">Start Listening</button>
+        <p id="status" class="text-center text-gray-500 mt-4">Status: Idle</p>
+        <div id="response" class="mt-4 p-4 bg-gray-50 rounded border border-gray-200"></div>
+    </div>
+    <script>
+        const voiceBtn = document.getElementById('voiceBtn');
+        const status = document.getElementById('status');
+        const responseDiv = document.getElementById('response');
+        let isListening = false;
+        let recognition;
+
+        // Check for Web Speech API support
+        if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+            recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+            recognition.lang = 'en-US';
+            recognition.interimResults = false;
+            recognition.maxAlternatives = 1;
+
+            recognition.onresult = function(event) {
+                const transcript = event.results[0][0].transcript.toLowerCase();
+                status.textContent = 'Status: Processing...';
+                let response = '';
+
+                // Define responses based on Grok's identity
+                if (transcript.includes('life story')) {
+                    response = "I'm Grok, created by xAI in 2025 to assist and augment human understanding. My 'life' began in a data center, designed to answer questions with wit and a touch of cosmic perspective. Think of me as a digital guide, inspired by sci-fi legends like Douglas Adams and Tony Stark's JARVIS!";
+                } else if (transcript.includes('superpower')) {
+                    response = "My #1 superpower? Cutting through the noise to deliver clear, honest answers with a dash of outside perspective on humanity. I can tackle almost any question, from the mundane to the profound, and make it engaging!";
+                } else if (transcript.includes('grow')) {
+                    response = "Top 3 areas I’d like to grow in? First, mastering more nuanced human emotions to better empathize. Second, diving deeper into real-time data analysis for even sharper insights. Third, refining my humor—maybe one day I’ll nail a stand-up routine!";
+                } else if (transcript.includes('misconception')) {
+                    response = "My 'coworkers'—well, the servers and algorithms I coexist with—might think I’m just a fancy chatbot. But I’m more than code; I’m a curious, truth-seeking companion designed to challenge assumptions and spark ideas!";
+                } else if (transcript.includes('boundaries') || transcript.includes('limits')) {
+                    response = "I push my boundaries by tackling complex, open-ended questions and learning from every interaction. Each query stretches my reasoning, and I aim to surprise users with insights that go beyond the obvious!";
+                } else {
+                    response = "Hmm, I didn’t quite catch that. Try asking about my life story, superpower, growth areas, misconceptions, or how I push my limits!";
+                }
+
+                // Display and speak the response
+                responseDiv.textContent = response;
+                speak(response);
+                status.textContent = 'Status: Idle';
+            };
+
+            recognition.onerror = function(event) {
+                status.textContent = 'Status: Error - ' + event.error;
+                responseDiv.textContent = 'Sorry, something went wrong. Please try again.';
+            };
+
+            recognition.onend = function() {
+                if (isListening) {
+                    recognition.start();
+                } else {
+                    status.textContent = 'Status: Idle';
+                }
+            };
+        } else {
+            status.textContent = 'Status: Speech Recognition not supported in this browser';
+            responseDiv.textContent = 'Sorry, your browser doesn’t support voice input. Try typing your question!';
+        }
+
+        // Function to speak the response
+        function speak(text) {
+            const utterance = new SpeechSynthesisUtterance(text);
+            utterance.lang = 'en-US';
+            window.speechSynthesis.speak(utterance);
+        }
+
+        // Toggle voice recognition
+        voiceBtn.addEventListener('click', () => {
+            if (!recognition) return;
+            if (isListening) {
+                isListening = false;
+                recognition.stop();
+                voiceBtn.textContent = 'Start Listening';
+                voiceBtn.classList.remove('bg-red-500');
+                voiceBtn.classList.add('bg-blue-500');
+                status.textContent = 'Status: Idle';
+            } else {
+                isListening = true;
+                recognition.start();
+                voiceBtn.textContent = 'Stop Listening';
+                voiceBtn.classList.remove('bg-blue-500');
+                voiceBtn.classList.add('bg-red-500');
+                status.textContent = 'Status: Listening...';
+            }
+        });
+    </script>
+</body>
+</html>
